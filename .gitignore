@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+/build/
+/dist/
+.venv/
+.DS_Store
+
+# written by tests/__init__.py (fake Stripe-shaped key; see there)
+/tests/fixtures/codescan/pl010_fp/src/__tests__/stripe.test.ts
+/tests/fixtures/codescan/pl010_tp/src/lib/stripe.ts
+/tests/fixtures/codescan/pl010_tp/.env

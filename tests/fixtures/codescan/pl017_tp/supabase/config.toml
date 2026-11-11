@@ -1,0 +1,7 @@
+project_id = "fixture"
+
+[functions.admin-delete-user]
+verify_jwt = false
+
+[functions.public-hello]
+verify_jwt = false

@@ -1,0 +1,5 @@
+[auth.email]
+enable_confirmations = true # keep on
+
+[auth.sms]
+enable_confirmations = false

@@ -1,0 +1,2 @@
+export const supabase = createClient("https://fakeprojectref000.supabase.co", "eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAic3VwYWJhc2UiLCAicmVmIjogImZha2Vwcm9qZWN0cmVmMDAwIiwgInJvbGUiOiAiYW5vbiIsICJpYXQiOiAxNzAwMDAwMDAwLCAiZXhwIjogMjAwMDAwMDAwMH0.FAKEsignatureFAKEsignatureFAKE000");
+const key = import.meta.env.VITE_SUPABASE_ANON_KEY;

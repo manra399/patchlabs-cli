@@ -1,0 +1,1 @@
+export const supabaseAdmin = createClient("https://fakeprojectref000.supabase.co", "eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAic3VwYWJhc2UiLCAicmVmIjogImZha2Vwcm9qZWN0cmVmMDAwIiwgInJvbGUiOiAic2VydmljZV9yb2xlIiwgImlhdCI6IDE3MDAwMDAwMDAsICJleHAiOiAyMDAwMDAwMDAwfQ.FAKEsignatureFAKEsignatureFAKE000");
