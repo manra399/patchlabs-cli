@@ -108,7 +108,7 @@ class TestScanOutput(unittest.TestCase):
     def test_human_table_has_ids_links_and_footer(self):
         _, out, _ = run(["scan", CRITICAL, "--offline"])
         self.assertIn("SEVERITY  ID", out)
-        self.assertIn("https://patchlabs.dev/findings/PL-010", out)
+        self.assertIn("https://patchlabs.dev/findings/pl-010", out)
         self.assertIn("src/lib/stripe.ts:1", out)
         self.assertEqual(out.rstrip("\n").splitlines()[-1], FOOTER)
         self.assertNotIn("\x1b[", out)  # not a terminal: no colour codes
