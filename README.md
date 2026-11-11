@@ -102,7 +102,7 @@ that level exists.
 ## Output
 
 The table shows each finding's id, severity, title and location (file and line, or the page address). Below the
-table, each id links to its page on patchlabs.dev, for example `https://patchlabs.dev/findings/PL-019`. Colour is used
+table, each id links to its page on patchlabs.dev, for example `https://patchlabs.dev/findings/pl-019`. Colour is used
 only on a terminal. It is switched off when `NO_COLOR` is set to a non-empty value.
 
 The table prints no evidence. The JSON output and the SARIF messages do include a short line of evidence, and

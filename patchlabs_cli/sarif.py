@@ -17,7 +17,7 @@ def to_sarif(findings):
             rule_score[rid] = 0.0
             rules.append({"id": rid, "name": rid,
                           "shortDescription": {"text": CHECK_TITLES.get(rid, f["title"])},
-                          "helpUri": FINDING_URL.format(rid), "properties": {"tags": ["security"]}})
+                          "helpUri": FINDING_URL.format(rid.lower()), "properties": {"tags": ["security"]}})
         score = SECURITY_SEVERITY.get(f["severity"], 0.0)
         rule_score[rid] = max(rule_score[rid], score)
         message = f"{f['title']}: {f['evidence']}" if f.get("evidence") else f["title"]

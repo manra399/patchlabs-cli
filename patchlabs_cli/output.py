@@ -52,7 +52,7 @@ def render(heading, notes, findings, colour, footer=FOOTER, max_rows=MAX_ROWS):
             if f["id"] not in seen:
                 seen.append(f["id"])
         for fid in seen:
-            lines.append(f"  {fid}  {FINDING_URL.format(fid)}")
+            lines.append(f"  {fid}  {FINDING_URL.format(fid.lower())}")
     else:
         lines.append("")
         lines.append("No findings.")
