@@ -113,7 +113,8 @@ class Repo:
                 if name in LOCKFILES:
                     self._load_lock(path, rel)
                     continue
-                if not _wanted(name) or ".min." in name.lower():
+                claude = reld.rsplit("/", 1)[-1] == ".claude" and name in ("settings.local.json", "settings.json")
+                if (not _wanted(name) and not claude) or ".min." in name.lower():
                     if ".min." in name.lower():
                         self.stats["skipped_minified"] += 1
                     continue

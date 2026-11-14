@@ -14,6 +14,7 @@ versions only, skip it with `--offline`), and the requests to the site you give 
 
 | ID | Severity | What it looks for | Title shown |
 |---|---|---|---|
+| PL-009 | critical, high, medium, low | Tokens and passwords saved in Claude Code `.claude/settings.local.json` or `.claude/settings.json` ("don't ask again" allow rules and `env` values); critical when git tracks the file. Also flags a committed local settings file, and a package whose `npm publish` would ship it (npm ignores your global git excludes) | Secret saved in a Claude Code settings file |
 | PL-010 | critical, high | Supabase service role keys, live Stripe or Supabase secret keys, and secrets behind a public env prefix (`VITE_`, `NEXT_PUBLIC_`, ...) in browser code or `.env` files | Service role key in client code |
 | PL-017 | high, info | Edge functions with JWT checks off that use the service role key and check the caller nowhere | Edge function open without sign-in while using the service key |
 | PL-018 | low | Email confirmation switched off in `supabase/config.toml` | Sign-ups need no email confirmation |

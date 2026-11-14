@@ -7,6 +7,7 @@ FINDING_URL = "https://patchlabs.dev/findings/{}"
 # One title per check id, taken from the code. Some checks produce several titles; the first is shown here.
 CHECK_TITLES = dict(RLS_TITLES)
 CHECK_TITLES.update({
+    "PL-009": "Secret saved in a Claude Code settings file",
     "PL-010": "Service role key in client code",
     "PL-017": "Edge function open without sign-in while using the service key",
     "PL-018": "Sign-ups need no email confirmation",
