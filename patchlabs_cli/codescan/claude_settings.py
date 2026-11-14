@@ -137,7 +137,7 @@ def check_claude_settings(repo):
             title = ("Secret saved in a Claude Code settings file that git tracks" if tracked
                      else "Secret saved in a Claude Code settings file")
             out.append(finding(
-                "PL-009", sev, title, rel, _line_of(f, text), f"{where}: {text.replace(secret, mask(secret))}",
+                "PL-009", sev, title, rel, _line_of(f, text.split("=", 1)[1] if where.startswith("env.") else text), f"{where}: {text.replace(secret, mask(secret))}",
                 f"Rotate the credential at the service first; it has been on disk in plain text"
                 f"{' and in your git history' if tracked else ''}. Then delete the rule, pass the secret through an "
                 f"environment variable instead of typing it into the command, and allow the command with a wildcard "

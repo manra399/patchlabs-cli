@@ -57,6 +57,8 @@ class TestClaudeSettings(unittest.TestCase):
             got = make(t, {"permissions": {"allow": ["Bash(PGPASSWORD=" + tok(14) + " psql -h db -U app)"]},
                            "env": {"STRIPE_SECRET_KEY": "sk_live_" + tok(30)}})
             self.assertEqual(len(got), 2)
+            lines = sorted(f["line_no"] for f in scan(t, offline=True)["findings"] if f["id"] == "PL-009")
+            self.assertEqual(lines, [4, 8])
 
     def test_evidence_is_masked(self):
         with tempfile.TemporaryDirectory() as t:

@@ -92,7 +92,7 @@ class TestScanOutput(unittest.TestCase):
         code, out, _ = run(["scan", CRITICAL, "--offline", "--json"])
         doc = json.loads(out)
         self.assertEqual(doc["tool"], "patchlabs-cli")
-        self.assertEqual(doc["version"], "0.1.0")
+        from patchlabs_cli import __version__; self.assertEqual(doc["version"], __version__)
         self.assertEqual(doc["command"], "scan")
         self.assertTrue(doc["findings"])
         self.assertTrue(doc["stats"]["dependencies"].startswith("skipped:"))  # no lockfile in this fixture
