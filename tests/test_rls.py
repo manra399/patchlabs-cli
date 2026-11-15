@@ -33,6 +33,57 @@ create table public.notes (id uuid primary key, body text, user_id uuid);
 alter table public.notes enable row level security;
 create policy "owner update" on public.notes for update to authenticated using (auth.uid() = user_id);
 """, [("PL-004", "medium")]),
+    "view_without_security_invoker_over_personal_data": ("""
+create table public.profiles (id uuid primary key, email text, user_id uuid);
+alter table public.profiles enable row level security;
+create policy "owner read" on public.profiles for select to authenticated using (auth.uid() = user_id);
+create view public.profile_list as select id, email from public.profiles;
+""", [("PL-014", "critical")]),
+    "view_over_guarded_table_no_personal": ("""
+create table public.orders (id uuid primary key, total int, user_id uuid);
+alter table public.orders enable row level security;
+create policy "owner read" on public.orders for select to authenticated using (auth.uid() = user_id);
+create or replace view public.order_totals as select o.user_id, sum(o.total) from public.orders o group by 1;
+""", [("PL-014", "high")]),
+    "view_with_security_invoker": ("""
+create table public.orders (id uuid primary key, total int, user_id uuid);
+alter table public.orders enable row level security;
+create policy "owner read" on public.orders for select to authenticated using (auth.uid() = user_id);
+create view public.order_totals with (security_invoker = true) as select * from public.orders;
+create view public.order_ids with (security_invoker) as select id from public.orders;
+""", []),
+    "view_fixed_later_by_alter": ("""
+create table public.orders (id uuid primary key, total int, user_id uuid);
+alter table public.orders enable row level security;
+create policy "owner read" on public.orders for select to authenticated using (auth.uid() = user_id);
+create view public.order_totals as select * from public.orders;
+alter view public.order_totals set (security_invoker = on);
+""", []),
+    "view_revoked_from_api_roles": ("""
+create table public.orders (id uuid primary key, total int, user_id uuid);
+alter table public.orders enable row level security;
+create policy "owner read" on public.orders for select to authenticated using (auth.uid() = user_id);
+create view public.order_totals as select * from public.orders;
+revoke all on public.order_totals from anon, authenticated;
+""", []),
+    "materialized_view_signed_in_only": ("""
+create table public.profiles (id uuid primary key, email text, user_id uuid);
+alter table public.profiles enable row level security;
+create policy "owner read" on public.profiles for select to authenticated using (auth.uid() = user_id);
+create materialized view public.emails as select email from public.profiles;
+revoke select on public.emails from anon;
+""", [("PL-014", "high")]),
+    "dropped_view": ("""
+create table public.orders (id uuid primary key, total int, user_id uuid);
+alter table public.orders enable row level security;
+create policy "owner read" on public.orders for select to authenticated using (auth.uid() = user_id);
+create view public.order_totals as select * from public.orders;
+drop view if exists public.order_totals;
+""", []),
+    "view_outside_public": ("""
+create schema private;
+create view private.v as select 1;
+""", []),
     "good_owner_policies": ("""
 create table public.notes (id uuid primary key, body text, user_id uuid);
 alter table public.notes enable row level security;

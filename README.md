@@ -34,8 +34,9 @@ versions only, skip it with `--offline`), and the requests to the site you give 
 | PL-006 | high, medium | A `SECURITY DEFINER` function with no fixed `search_path`, or callable by `anon` | SECURITY DEFINER function exposure |
 | PL-007 | medium | A public storage bucket | Public storage bucket |
 | PL-008 | critical, high | Row level security not enabled on a public table | Row level security is not enabled |
+| PL-014 | critical, high, medium | A view in `public` without `security_invoker`, or a materialized view, still selectable by `anon` or `authenticated` | View skips row level security |
 
-The SQL checks (PL-001 to PL-008) read the text of the Supabase `*.sql` files in the repository (see Limits), except dependency and build
+The SQL checks (PL-001 to PL-008 and PL-014) read the text of the Supabase `*.sql` files in the repository (see Limits), except dependency and build
 folders such as `node_modules` and `dist`. They do not run the SQL and do not test anything.
 Migrations are read in order, one project folder at a time.
 

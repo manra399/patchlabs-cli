@@ -11,7 +11,8 @@ from .codescan.common import redact
 TITLES = {"PL-001": "Anyone with the public key can read personal data", "PL-002": "Any signed-in user can read all rows",
           "PL-003": "Row level security is on but the table has no policies", "PL-004": "UPDATE policy without WITH CHECK",
           "PL-005": "Policy is always true", "PL-006": "SECURITY DEFINER function exposure", "PL-007": "Public storage bucket",
-          "PL-008": "Row level security is not enabled"}
+          "PL-008": "Row level security is not enabled",
+          "PL-014": "View skips row level security"}
 FIXES = {
     "PL-001": "Limit the policy to the row owner, for example using (auth.uid() = user_id), or drop the anon role from it.",
     "PL-002": "Scope the policy to the row owner, for example using (auth.uid() = user_id), instead of any signed-in user.",
@@ -21,6 +22,8 @@ FIXES = {
     "PL-006": "Set a fixed search_path (set search_path = '') and revoke EXECUTE on the function from anon and public.",
     "PL-007": "Make the bucket private and serve files through signed URLs or a policy on storage.objects.",
     "PL-008": "Run alter table ... enable row level security, then add policies for the access the app needs.",
+    "PL-014": "Run alter view ... set (security_invoker = true) so the caller's policies apply; for a materialized view, revoke select "
+              "from anon and authenticated and serve it through a function that filters by auth.uid().",
 }
 RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
 PERSONAL = re.compile(r"email|phone|address|dob|birth|ssn|passport", re.I)
@@ -43,6 +46,17 @@ BUCKET_INSERT = re.compile(r"^insert\s+into\s+storage\s*\.\s*buckets\s*\(([^)]*)
 BUCKET_UPDATE = re.compile(r"^update\s+storage\s*\.\s*buckets\s+set\s+(.*?)\bpublic\s*=\s*true\b(.*)$", F)
 USER_SCOPED = re.compile(r"auth\s*\.\s*(?:uid|jwt|email)\s*\(\s*\)|current_user|session_user|current_setting|is_member|has_role", re.I)
 SIGNED_IN_ONLY = re.compile(r"auth\s*\.\s*role\s*\(\s*\)\s*=\s*'authenticated'|auth\s*\.\s*uid\s*\(\s*\)\s+is\s+not\s+null", re.I)
+
+CREATE_VIEW = re.compile(rf"^create\s+(?:or\s+replace\s+)?(?:(?:temporary|temp)\s+)?(?:recursive\s+)?(materialized\s+)?view\s+"
+                         rf"(?:if\s+not\s+exists\s+)?({NAME})(.*)$", F)
+ALTER_VIEW = re.compile(rf"^alter\s+(materialized\s+)?view\s+(?:if\s+exists\s+)?({NAME})\s+(.*)$", F)
+DROP_VIEW = re.compile(r"^drop\s+(?:materialized\s+)?view\s+(?:if\s+exists\s+)?", F)
+GRANT_TABLE = re.compile(rf"^(grant|revoke)\s+(?:grant\s+option\s+for\s+)?((?:all|select|insert|update|delete|truncate|references|trigger)"
+                         rf"(?:\s+privileges)?(?:\s*,\s*\w+)*)\s+on\s+(?:table\s+)?((?:{NAME})(?:\s*,\s*{NAME})*)\s+(?:to|from)\s+(.*)$", F)
+INVOKER_ON = re.compile(r"\bsecurity_invoker\b\s*(?:=\s*'?(?:true|on|1|yes)'?\s*)?(?=,|\)|$)", re.I)
+INVOKER_OFF = re.compile(r"\bsecurity_invoker\b\s*=\s*'?(?:false|off|0|no)'?", re.I)
+FROM_REL = re.compile(rf"\b(?:from|join)\s+(?:only\s+)?({NAME})", re.I)
+API_ROLES = {"anon", "authenticated"}
 
 
 # ---- SQL scanning ------------------------------------------------------------------------------------------------
@@ -188,7 +202,7 @@ def is_true(expr):
 
 def analyze(files):
     """files: [(path, sql)] in migration order. Returns (tables, findings)."""
-    tables, functions, buckets, findings = {}, {}, [], []
+    tables, functions, buckets, findings, views = {}, {}, [], [], {}
 
     def find(fid, severity, table, path, line, stmt, detail=None):
         findings.append({"id": fid, "title": TITLES[fid], "table": table, "file": path, "line": line, "severity": severity,
@@ -257,6 +271,44 @@ def analyze(files):
                     for f in functions.values():
                         if f["schema"] == m.group(2).lower():
                             f["anon"] = True
+            elif (m := CREATE_VIEW.match(st)):
+                schema, v = norm(m.group(2))
+                if schema != "public":
+                    continue
+                rest = m.group(3)
+                asm = re.search(r"\bas\b", rest, re.I)
+                head, body = (rest[:asm.start()], rest[asm.end():]) if asm else (rest, "")
+                opts = re.search(r"\bwith\s*\(([^)]*)\)", head, re.I)
+                views[v] = {"mat": bool(m.group(1)), "invoker": bool(opts and INVOKER_ON.search(opts.group(1))),
+                            "roles": set(API_ROLES), "bases": {norm(b)[1] for b in FROM_REL.findall(body) if norm(b)[0] == "public"},
+                            "file": path, "line": line, "stmt": st}
+            elif (m := ALTER_VIEW.match(st)):
+                v = norm(m.group(2))[1]
+                if v not in views:
+                    continue
+                action = m.group(3)
+                if (rn := re.match(rf"rename\s+to\s+({IDENT})\s*$", action, re.I)):
+                    views[norm(rn.group(1))[1]] = views.pop(v)
+                elif re.match(r"set\s*\(", action, re.I):
+                    if INVOKER_ON.search(action):
+                        views[v]["invoker"] = True
+                    elif INVOKER_OFF.search(action):
+                        views[v]["invoker"] = False
+                elif re.match(r"reset\s*\(", action, re.I) and re.search(r"\bsecurity_invoker\b", action, re.I):
+                    views[v]["invoker"] = False
+            elif (m := DROP_VIEW.match(st)):
+                for nm in TRAILING_DROP.sub("", st[m.end():].rstrip()).split(","):
+                    if len(nm.strip()) <= MAX_NAME:
+                        views.pop(norm(nm.strip())[1], None)
+            elif (m := GRANT_TABLE.match(st)):
+                if not re.search(r"\b(all|select)\b", m.group(2), re.I):
+                    continue
+                roles = {r.strip().strip('"').lower() for r in re.sub(r"\b(with\s+grant\s+option|cascade|restrict)\b", "", m.group(4),
+                                                                       flags=re.I).split(",")} & API_ROLES
+                for nm in re.findall(NAME, m.group(3)):
+                    v = norm(nm)[1]
+                    if v in views:
+                        views[v]["roles"] = (views[v]["roles"] | roles) if m.group(1).lower() == "grant" else (views[v]["roles"] - roles)
             elif (m := BUCKET_INSERT.match(st)):
                 cols = [x.strip().strip('"').lower() for x in m.group(1).split(",")]
                 if "public" in cols:
@@ -311,6 +363,22 @@ def analyze(files):
         if f["definer"] and (not f["search_path"] or f["anon"]):
             why = [w for w, on in (("no fixed search_path", not f["search_path"]), ("callable by anon", f["anon"])) if on]
             find("PL-006", "high" if f["anon"] else "medium", None, f["file"], f["line"], f["stmt"], f"Function {name}: " + " and ".join(why))
+    for name, v in views.items():
+        if (v["invoker"] and not v["mat"]) or not v["roles"]:
+            continue
+        bases = [tables[b] for b in sorted(v["bases"]) if b in tables]
+        personal = sorted({c for b in bases for c in b["columns"] if PERSONAL.search(c)})
+        guarded = [b["name"] for b in bases if b["rls"]]
+        who = " and ".join(sorted(v["roles"]))
+        kind = "Materialized view" if v["mat"] else "View"
+        why = ("stores its rows and cannot use row level security" if v["mat"] else "runs as its owner, without security_invoker")
+        sev = "critical" if personal and "anon" in v["roles"] else "high" if personal or guarded else "medium"
+        detail = f"{kind} {name} {why}, and {who} can select from it"
+        if guarded:
+            detail += "; it skips the policies on " + ", ".join(guarded)
+        if personal:
+            detail += "; personal columns: " + ", ".join(personal)
+        find("PL-014", sev, name, v["file"], v["line"], v["stmt"], detail + ".")
     for name, path, line, st in buckets:
         find("PL-007", "medium", None, path, line, st, f"Bucket {name or '(unnamed)'} serves its files to anyone with the link.")
     findings.sort(key=lambda x: (RANK[x["severity"]], x["id"], x["file"], x["line"]))
