@@ -26,6 +26,7 @@ versions only, skip it with `--offline`), and the requests to the site you give 
 | PL-024 | medium | HTML inserted from a value that is not a literal (`innerHTML`, `dangerouslySetInnerHTML`, `v-html`, `{@html}`) without sanitising | User content rendered as raw HTML |
 | PL-025 | critical, high, info | Firebase or Realtime Database rules that allow anyone, or any signed-in user, to read or write | Firebase rules allow anyone to read and write |
 | PL-026 | medium, info | Server code that allows any origin through CORS and also uses cookies or credentials | Any website can call a signed-in function (CORS reflects any origin) |
+| PL-037 | high, medium | Personal data put in a request header (`X-User-Email: user.email`, a real address in a header) or written into a prompt sent to an AI model API (OpenAI, Anthropic, Gemini, Vercel AI SDK, LangChain and others, JS/TS and Python). High for ID, health, card or bank fields; medium for contact fields | Personal data sent in a request header or to an AI model API |
 | PL-001 | critical | A policy that lets the public or `anon` role read personal columns | Anyone with the public key can read personal data |
 | PL-002 | high, medium | A policy that lets any signed-in user read every row | Any signed-in user can read all rows |
 | PL-003 | low | Row level security on, with no policies | Row level security is on but the table has no policies |

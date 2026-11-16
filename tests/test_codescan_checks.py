@@ -145,3 +145,22 @@ class TestPL010(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPL037(unittest.TestCase):
+    def test_headers_with_personal_fields(self):
+        h = [x for x in hits("pl037_tp", "PL-037") if x[0] == "src/lib/api.ts"]
+        self.assertEqual(h, [("src/lib/api.ts", 16, "high"), ("src/lib/api.ts", 7, "medium"),
+                             ("src/lib/api.ts", 8, "medium"), ("src/lib/api.ts", 17, "medium")])
+
+    def test_prompts_with_personal_fields(self):
+        h = [x for x in hits("pl037_tp", "PL-037") if x[0] != "src/lib/api.ts"]
+        self.assertEqual(h, [("app/triage.py", 7, "high"),
+                             ("supabase/functions/summarize/index.ts", 11, "high"),
+                             ("supabase/functions/summarize/index.ts", 12, "medium")])
+        f = next(f for f in run("pl037_tp")["findings"] if f["id"] == "PL-037")
+        self.assertFalse(f["proven"])
+
+    def test_near_miss_ids_placeholders_comments_and_answers(self):
+        # opaque ids, example.com contact, a commented-out header, a DB select, the model's answer sent back
+        self.assertEqual(hits("pl037_fp", "PL-037"), [])

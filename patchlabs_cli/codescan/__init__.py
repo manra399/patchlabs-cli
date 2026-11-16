@@ -4,12 +4,12 @@
     result = scan("/path/to/repo")   # {"findings": [...], "stats": {...}}
 
 Reads the repository as text only: never imports, executes or installs anything from it.
-Static checks: PL-009 (Claude Code settings files), PL-010 (backup), PL-017..PL-022, PL-024..PL-026. Dependency check: PL-023 via OSV.
+Static checks: PL-009 (Claude Code settings files), PL-010 (backup), PL-017..PL-022, PL-024..PL-026, PL-037 (personal data in headers or AI prompts). Dependency check: PL-023 via OSV.
 """
 import os
 import time
 
-from . import claude_settings, code_checks, lockfiles, osv, server_checks
+from . import claude_settings, code_checks, lockfiles, osv, pii_flows, server_checks
 from .common import MAX_PER_CHECK, SEVERITY_RANK, Repo
 
 __all__ = ["scan"]
@@ -25,6 +25,7 @@ CHECKS = [
     ("PL-026", server_checks.check_cors),
     ("PL-010", code_checks.check_client_secrets),
     ("PL-009", claude_settings.check_claude_settings),
+    ("PL-037", pii_flows.check_pii_flows),
 ]
 
 

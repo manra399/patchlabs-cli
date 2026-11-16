@@ -67,7 +67,7 @@ def _wanted(base):
     low = base.lower()
     i = low.rfind(".")
     ext = low[i:] if i > 0 else ""
-    if ext in CODE_EXT or ext in (".sql", ".rules"):
+    if ext in CODE_EXT or ext in (".sql", ".rules", ".py"):
         return True
     if low in ("config.toml", "database.rules.json", "package.json") or low.startswith(".env"):
         return True

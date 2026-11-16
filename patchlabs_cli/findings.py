@@ -29,6 +29,7 @@ CHECK_TITLES.update({
     "PL-034": "Page loads scripts or styles over plain HTTP",
     "PL-035": "Server headers reveal software versions",
     "PL-036": "No Referrer-Policy",
+    "PL-037": "Personal data sent in a request header or to an AI model API",
 })
 
 
