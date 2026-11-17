@@ -12,7 +12,7 @@ TITLES = {"PL-001": "Anyone with the public key can read personal data", "PL-002
           "PL-003": "Row level security is on but the table has no policies", "PL-004": "UPDATE policy without WITH CHECK",
           "PL-005": "Policy is always true", "PL-006": "SECURITY DEFINER function exposure", "PL-007": "Public storage bucket",
           "PL-008": "Row level security is not enabled",
-          "PL-014": "View skips row level security"}
+          "PL-014": "View skips row level security", "PL-038": "Any signed-in user can add themselves to any team"}
 FIXES = {
     "PL-001": "Limit the policy to the row owner, for example using (auth.uid() = user_id), or drop the anon role from it.",
     "PL-002": "Scope the policy to the row owner, for example using (auth.uid() = user_id), instead of any signed-in user.",
@@ -24,6 +24,10 @@ FIXES = {
     "PL-008": "Run alter table ... enable row level security, then add policies for the access the app needs.",
     "PL-014": "Run alter view ... set (security_invoker = true) so the caller's policies apply; for a materialized view, revoke select "
               "from anon and authenticated and serve it through a function that filters by auth.uid().",
+    "PL-038": "Don't let users insert or move their own membership rows. Drop the INSERT/UPDATE policy on the membership table and "
+              "add members through a security definer function that checks an invite or that the caller is an admin of that team; "
+              "or require it in the policy, for example with check (exists (select 1 from members m where m.team_id = team_id and "
+              "m.user_id = auth.uid() and m.role = 'admin')).",
 }
 RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
 PERSONAL = re.compile(r"email|phone|address|dob|birth|ssn|passport", re.I)
@@ -57,6 +61,13 @@ INVOKER_ON = re.compile(r"\bsecurity_invoker\b\s*(?:=\s*'?(?:true|on|1|yes)'?\s*
 INVOKER_OFF = re.compile(r"\bsecurity_invoker\b\s*=\s*'?(?:false|off|0|no)'?", re.I)
 FROM_REL = re.compile(rf"\b(?:from|join)\s+(?:only\s+)?({NAME})", re.I)
 API_ROLES = {"anon", "authenticated"}
+TENANT_COL = re.compile(r"^(?:org|orgs|organization|organisation|team|tenant|workspace|company|account|project|group|club|household|"
+                        r"school|space|business|store|shop|clinic|practice|agency)_?id$", re.I)
+MEMBER_USER_COL = re.compile(r"^(?:user|profile|member|owner|uid|auth_user)_?id$|^uid$", re.I)
+CALL = re.compile(r"\b([A-Za-z_][\w$]*(?:\s*\.\s*[A-Za-z_][\w$]*)?)\s*\(")
+HARMLESS_CALLS = {"coalesce", "lower", "upper", "trim", "now", "auth.uid", "auth.jwt", "auth.role", "auth.email", "nullif", "cast",
+                  "in", "and", "or", "not", "check", "using"}
+JOIN_GUARD = re.compile(r"\bselect\b|\bexists\b|invit|\brole\b|admin|owner", re.I)
 
 
 # ---- SQL scanning ------------------------------------------------------------------------------------------------
@@ -379,10 +390,62 @@ def analyze(files):
         if personal:
             detail += "; personal columns: " + ", ".join(personal)
         find("PL-014", sev, name, v["file"], v["line"], v["stmt"], detail + ".")
+    team_joins(tables, functions, find)
     for name, path, line, st in buckets:
         find("PL-007", "medium", None, path, line, st, f"Bucket {name or '(unnamed)'} serves its files to anyone with the link.")
     findings.sort(key=lambda x: (RANK[x["severity"]], x["id"], x["file"], x["line"]))
     return out_tables, findings
+
+
+def join_guarded(expr):
+    """True when a membership write rule checks more than 'the row is mine' (an invite, a role, a subquery or a helper)."""
+    if expr is None or is_true(expr):
+        return False
+    if JOIN_GUARD.search(expr):
+        return True
+    calls = {re.sub(r"\s+", "", c).lower() for c in CALL.findall(expr)}
+    return bool(calls - HARMLESS_CALLS)
+
+
+def team_joins(tables, functions, find):
+    """PL-038: a membership table other tables trust for access, where a signed-in user can write their own row.
+
+    Inserting (my id, your team id) or updating my row's team id puts me in your team, and every policy that asks
+    'is the caller a member of this row's team' then says yes."""
+    helpers = {fn: f["stmt"] for fn, f in functions.items()}
+    trusted = {}
+    for t in tables.values():
+        for p in t["policies"].values():
+            text = " ".join(e for e in (p["using"], p["check"]) if e)
+            refs = {norm(r)[1] for r in FROM_REL.findall(text)}
+            for c in CALL.findall(text):
+                fn = norm(c)[1]
+                if fn in helpers:
+                    refs |= {norm(r)[1] for r in FROM_REL.findall(helpers[fn])}
+            for m in refs - {t["name"]}:
+                trusted.setdefault(m, set()).add(t["name"])
+    for mname, users in sorted(trusted.items()):
+        m = tables.get(mname)
+        if not m or not m["rls"]:
+            continue  # PL-008 already covers a membership table without RLS
+        tenant = [c for c in m["columns"] if TENANT_COL.match(c)]
+        if not tenant or not any(MEMBER_USER_COL.match(c) for c in m["columns"]):
+            continue
+        for p in m["policies"].values():
+            if not p["roles"] & {"authenticated", "public"} or p["cmd"] not in ("insert", "update", "all"):
+                continue
+            rule = p["check"] if p["check"] is not None else p["using"]
+            if rule is None or join_guarded(rule) or (p["cmd"] == "all" and join_guarded(p["using"])):
+                continue
+            if not is_true(rule) and not USER_SCOPED.search(rule):
+                continue
+            personal = sorted({c for u in users if u in tables for c in tables[u]["columns"] if PERSONAL.search(c)})
+            verb = {"insert": "insert a row", "update": "change the " + tenant[0] + " on their own row", "all": "insert or change a row"}[p["cmd"]]
+            detail = (f"Membership table {mname} decides access to {', '.join(sorted(users))}; any signed-in user can {verb} "
+                      f"with another team's {tenant[0]} and then passes those policies")
+            if personal:
+                detail += "; personal columns behind it: " + ", ".join(personal)
+            find("PL-038", "critical" if personal else "high", mname, p["file"], p["line"], p["stmt"], detail + ".")
 
 
 PROOF = "Found by reading the migration SQL; not tested against a live database."

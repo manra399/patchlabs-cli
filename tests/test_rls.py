@@ -10,6 +10,20 @@ from patchlabs_cli import rls, sqlfiles  # noqa: E402
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROJECT = os.path.join(HERE, "fixtures", "rls", "project")
 
+TEAM = """
+create table public.teams (id uuid primary key, name text);
+create table public.team_members (team_id uuid, user_id uuid, role text);
+create table public.customers (id uuid primary key, team_id uuid, email text);
+alter table public.teams enable row level security;
+alter table public.team_members enable row level security;
+alter table public.customers enable row level security;
+create policy "members read" on public.customers for select to authenticated
+  using (team_id in (select team_id from public.team_members where user_id = auth.uid()));
+create policy "see own memberships" on public.team_members for select to authenticated using (user_id = auth.uid());
+create policy "team read" on public.teams for select to authenticated
+  using (exists (select 1 from public.team_members m where m.team_id = id and m.user_id = auth.uid()));
+"""
+
 CASES = {
     "rls_enabled_no_policy": ("""
 create table public.notes (id uuid primary key, body text, user_id uuid);
@@ -84,6 +98,35 @@ drop view if exists public.order_totals;
 create schema private;
 create view private.v as select 1;
 """, []),
+    "member_table_self_insert": (TEAM + """
+create policy "join" on public.team_members for insert to authenticated with check (user_id = auth.uid());
+""", [("PL-038", "critical")]),
+    "member_table_self_update_moves_team": (TEAM + """
+create policy "edit me" on public.team_members for update to authenticated
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+""", [("PL-038", "critical")]),
+    "member_insert_needs_admin": (TEAM + """
+create policy "admins add" on public.team_members for insert to authenticated with check (exists (
+  select 1 from public.team_members m where m.team_id = team_members.team_id and m.user_id = auth.uid() and m.role = 'admin'));
+""", []),
+    "member_insert_through_helper": (TEAM + """
+create function public.is_team_admin(t uuid) returns boolean language sql security definer set search_path = '' as $$
+  select exists (select 1 from public.team_members where team_id = t and user_id = auth.uid() and role = 'admin') $$;
+create policy "admins add" on public.team_members for insert to authenticated with check (public.is_team_admin(team_id));
+""", []),
+    "members_added_only_by_function": (TEAM, []),
+    "helper_function_trusts_member_table": ("""
+create table public.orgs (id uuid primary key);
+alter table public.orgs enable row level security;
+create table public.org_members (org_id uuid, user_id uuid);
+create table public.invoices (id uuid primary key, org_id uuid, total int);
+alter table public.org_members enable row level security;
+alter table public.invoices enable row level security;
+create function public.is_member(o uuid) returns boolean language sql security definer set search_path = '' as $$
+  select exists (select 1 from public.org_members where org_id = o and user_id = auth.uid()) $$;
+create policy "read" on public.invoices for select to authenticated using (public.is_member(org_id));
+create policy "own" on public.org_members for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+""", [("PL-038", "high"), ("PL-003", "low")]),
     "good_owner_policies": ("""
 create table public.notes (id uuid primary key, body text, user_id uuid);
 alter table public.notes enable row level security;

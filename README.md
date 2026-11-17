@@ -36,8 +36,9 @@ versions only, skip it with `--offline`), and the requests to the site you give 
 | PL-007 | medium | A public storage bucket | Public storage bucket |
 | PL-008 | critical, high | Row level security not enabled on a public table | Row level security is not enabled |
 | PL-014 | critical, high, medium | A view in `public` without `security_invoker`, or a materialized view, still selectable by `anon` or `authenticated` | View skips row level security |
+| PL-038 | critical, high | A membership table (team, org, workspace, tenant) that other tables' policies trust, where a signed-in user can insert their own row or change its team id: inserting (my id, your team id) makes every "is the caller a member" policy say yes. Critical when the tables behind it hold personal columns | Any signed-in user can add themselves to any team |
 
-The SQL checks (PL-001 to PL-008 and PL-014) read the text of the Supabase `*.sql` files in the repository (see Limits), except dependency and build
+The SQL checks (PL-001 to PL-008, PL-014 and PL-038) read the text of the Supabase `*.sql` files in the repository (see Limits), except dependency and build
 folders such as `node_modules` and `dist`. They do not run the SQL and do not test anything.
 Migrations are read in order, one project folder at a time.
 
