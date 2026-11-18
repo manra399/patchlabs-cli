@@ -164,3 +164,23 @@ class TestPL037(unittest.TestCase):
     def test_near_miss_ids_placeholders_comments_and_answers(self):
         # opaque ids, example.com contact, a commented-out header, a DB select, the model's answer sent back
         self.assertEqual(hits("pl037_fp", "PL-037"), [])
+
+
+class TestPL039(unittest.TestCase):
+    def test_plaintext_lookups_writes_and_schema(self):
+        self.assertEqual(sorted(hits("pl039_tp", "PL-039")), [
+            ("api/login.py", 2, "high"),
+            ("server/auth.js", 2, "high"),
+            ("src/pages/Admin.tsx", 2, "high"),
+            ("src/pages/Login.tsx", 3, "high"),
+            ("src/pages/Signup.tsx", 6, "high"),
+            ("supabase/migrations/20240101000000_users.sql", 4, "medium"),
+        ])
+        f = next(f for f in run("pl039_tp")["findings"] if f["id"] == "PL-039")
+        self.assertFalse(f["proven"])
+        self.assertIn("Argon2id or bcrypt", f["fix"])
+
+    def test_near_miss_auth_provider_hashed_and_form_state(self):
+        # supabase.auth.signUp/updateUser, bcrypt-hashed writes, lookup by email then compare, form state,
+        # zod schema, password_reset_token, password_hash column with pgcrypto
+        self.assertEqual(hits("pl039_fp", "PL-039"), [])

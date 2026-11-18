@@ -30,6 +30,7 @@ CHECK_TITLES.update({
     "PL-035": "Server headers reveal software versions",
     "PL-036": "No Referrer-Policy",
     "PL-037": "Personal data sent in a request header or to an AI model API",
+    "PL-039": "Passwords stored or looked up in plain text",
 })
 
 
